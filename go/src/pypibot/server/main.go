@@ -2,47 +2,35 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
-	"net"
-	"net/http"
+
+	"github.com/jordanorelli/moon"
 )
 
-func serveRpc(c net.Conn) {
+type Config struct {
+	WebAddr string `name: web_addr; required: true`
+	RpcAddr string `name: rpc_addr; required: true`
 }
 
-func startRpc(addr string) error {
-	a, err := net.ResolveTCPAddr("tcp", addr)
+func (c *Config) readFrom(filename string) error {
+	doc, err := moon.ReadFile(filename)
 	if err != nil {
 		return err
 	}
 
-	s, err := net.ListenTCP("tcp", a)
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		for {
-			c, err := s.Accept()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			go serveRpc(c)
-		}
-	}()
-
-	return nil
+	return doc.Fill(c)
 }
 
 func main() {
-	flagHttpAddr := flag.String("http-addr", ":8080", "")
-	flagRpcAddr := flag.String("rpc-addr", ":8081", "")
+	flagCfg := flag.String("cfg", "config.moon", "")
 	flag.Parse()
 
-	if err := startRpc(*flagRpcAddr); err != nil {
-		log.Fatal(err)
+	var cfg Config
+
+	if err := cfg.readFrom(*flagCfg); err != nil {
+		log.Panic(err)
 	}
 
-	log.Fatal(http.ListenAndServe(*flagHttpAddr, nil))
+	fmt.Println(cfg)
 }
