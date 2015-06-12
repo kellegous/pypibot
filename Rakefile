@@ -32,3 +32,7 @@ end
 task 'build/bin/server' => godeps + FileList['go/src/pypibot/server/**'] do |t|
 	sh 'go', 'build', '-o', t.name, 'pypibot/server'
 end
+
+task :nuke do
+	rm_rf 'build'
+end
