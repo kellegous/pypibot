@@ -23,6 +23,14 @@ func decodePem(filename string) error {
 	return nil
 }
 
+func decodeAll(t *testing.T, filenames ...string) {
+	for _, filename := range filenames {
+		if err := decodePem(filename); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestGenerateCa(t *testing.T) {
 	tmp, err := ioutil.TempDir(os.TempDir(), "")
 	if err != nil {
@@ -38,13 +46,7 @@ func TestGenerateCa(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := decodePem(key); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := decodePem(crt); err != nil {
-		t.Fatal(err)
-	}
+	decodeAll(t, key, crt)
 }
 
 func TestGenerateCert(t *testing.T) {
@@ -53,4 +55,25 @@ func TestGenerateCert(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmp)
+
+	caKey := filepath.Join(tmp, "ca-key.pem")
+	caCrt := filepath.Join(tmp, "ca-crt.pem")
+
+	if err := GenerateCa("kellegous ltd", caCrt, caKey); err != nil {
+		t.Fatal(err)
+	}
+
+	crt := filepath.Join(tmp, "crt.pem")
+	key := filepath.Join(tmp, "key.pem")
+
+	ser, err := GenerateCert("kellego.us", caCrt, caKey, crt, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ser == "" {
+		t.Fatal("empty serial")
+	}
+
+	decodeAll(t, caCrt, caKey, crt, key)
 }

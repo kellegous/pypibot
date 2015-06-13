@@ -5,8 +5,10 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
+// Use openssl to generate a new RSA key.
 func GenerateRsaKey(filename string, size int) error {
 	if err := exec.Command(
 		"openssl",
@@ -20,6 +22,7 @@ func GenerateRsaKey(filename string, size int) error {
 	return nil
 }
 
+// Use openssl to generate a new private CA certificate and key.
 func GenerateCa(name, crtFile, keyFile string) error {
 	if err := GenerateRsaKey(keyFile, 2048); err != nil {
 		return err
@@ -40,43 +43,54 @@ func GenerateCa(name, crtFile, keyFile string) error {
 	return nil
 }
 
-func GenerateCert(host, caCrtFile, caKeyFile, crtFile, keyFile string) error {
+func closeAndRemove(f *os.File) {
+	f.Close()
+	os.Remove(f.Name())
+}
+
+// Use openssl to generate a new certificate signed by the given CA key.
+func GenerateCert(host, caCrtFile, caKeyFile, crtFile, keyFile string) (string, error) {
 	if err := GenerateRsaKey(keyFile, 2048); err != nil {
-		return err
+		return "", err
 	}
 
-	reqFile, err := ioutil.TempFile("", "")
+	tmp, err := ioutil.TempDir(os.TempDir(), "")
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer func() {
-		reqFile.Close()
-		os.Remove(reqFile.Name())
-	}()
+	defer os.RemoveAll(tmp)
+
+	reqFile := filepath.Join(tmp, "req")
+	serFile := filepath.Join(tmp, "ser")
 
 	if err := exec.Command(
 		"openssl",
 		"req",
 		"-new",
-		"-out", reqFile.Name(),
+		"-out", reqFile,
 		"-key", keyFile,
 		"-subj", fmt.Sprintf("/CN=%s", host)).Run(); err != nil {
-		return fmt.Errorf("unable to create signing request: %s", err)
+		return "", fmt.Errorf("unable to create signing request: %s", err)
 	}
 
 	if err := exec.Command(
 		"openssl",
 		"x509",
 		"-req",
-		"-in", reqFile.Name(),
+		"-in", reqFile,
 		"-out", crtFile,
 		"-CAkey", caKeyFile,
 		"-CA", caCrtFile,
 		"-days", "365",
 		"-CAcreateserial",
-		"-CAserial", "serial").Run(); err != nil {
-		return fmt.Errorf("unable to create certificate: %s", err)
+		"-CAserial", serFile).Run(); err != nil {
+		return "", fmt.Errorf("unable to create certificate: %s", err)
 	}
 
-	return nil
+	b, err := ioutil.ReadFile(serFile)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
 }
