@@ -2,35 +2,26 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
+	"net/http"
 
-	"github.com/jordanorelli/moon"
+	"pypibot/config"
+	"pypibot/rpc"
 )
 
-type Config struct {
-	WebAddr string `name: web_addr; required: true`
-	RpcAddr string `name: rpc_addr; required: true`
-}
-
-func (c *Config) readFrom(filename string) error {
-	doc, err := moon.ReadFile(filename)
-	if err != nil {
-		return err
-	}
-
-	return doc.Fill(c)
-}
-
 func main() {
-	flagCfg := flag.String("cfg", "config.moon", "")
+	flagCfg := flag.String("cfg", "config.json", "")
 	flag.Parse()
 
-	var cfg Config
+	var cfg config.Config
 
-	if err := cfg.readFrom(*flagCfg); err != nil {
+	if err := cfg.ReadFromFile(*flagCfg); err != nil {
 		log.Panic(err)
 	}
 
-	fmt.Println(cfg)
+	if err := rpc.Serve(&cfg); err != nil {
+		log.Panic(err)
+	}
+
+	log.Panic(http.ListenAndServe(cfg.Web.Addr, nil))
 }

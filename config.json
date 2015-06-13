@@ -1,0 +1,12 @@
+{
+	"web": {
+		"addr": ":8080"
+	},
+
+	"rpc": {
+		"addr": ":8081",
+
+		"crt": "crt.pem",
+		"key": "key.pem"
+	}
+}
