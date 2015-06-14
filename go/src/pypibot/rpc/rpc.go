@@ -21,6 +21,7 @@ func newListener(cfg *config.Config) (net.Listener, error) {
 
 	return tls.NewListener(l, &tls.Config{
 		Certificates: []tls.Certificate{crt},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}), nil
 }
 
@@ -29,6 +30,12 @@ func serve(c *tls.Conn, cfg *config.Config) {
 
 	if err := c.Handshake(); err != nil {
 		log.Println(err)
+		return
+	}
+
+	log.Printf("len(certs) = %d", len(c.ConnectionState().PeerCertificates))
+	for _, crt := range c.ConnectionState().PeerCertificates {
+		log.Println(crt)
 	}
 
 	// TODO(knorton): Authenticate and dispatch by client type.

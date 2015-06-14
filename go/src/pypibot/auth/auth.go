@@ -1,6 +1,10 @@
 package auth
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -93,4 +97,36 @@ func GenerateCert(host, caCrtFile, caKeyFile, crtFile, keyFile string) (string, 
 	}
 
 	return string(b), nil
+}
+
+func parsePrivateKey(b []byte) (*rsa.PrivateKey, error) {
+	x, err := x509.ParsePKCS1PrivateKey(b)
+	if err == nil {
+		return x, nil
+	}
+
+	y, err := x509.ParsePKCS8PrivateKey(b)
+	if err == nil {
+		return y.(*rsa.PrivateKey), nil
+	}
+
+	return nil, errors.New("unable to decode private key")
+}
+
+func ReadPrivateKey(filename string) (*rsa.PrivateKey, error) {
+	b, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	p, _ := pem.Decode(b)
+	if p == nil {
+		return nil, fmt.Errorf("invalid pem: %s", filename)
+	}
+
+	return parsePrivateKey(p.Bytes)
+}
+
+func GetPublicKey(prv *rsa.PrivateKey) ([]byte, error) {
+	return x509.MarshalPKIXPublicKey(&prv.PublicKey)
 }

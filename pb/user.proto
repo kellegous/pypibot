@@ -1,0 +1,14 @@
+package pb;
+
+message User {
+	required string email = 1;
+	required string name = 2;
+
+	enum UserType {
+		PERSON = 0;
+		BOT = 1;
+		GOD = 2;
+	}
+
+	required UserType type = 3;
+}

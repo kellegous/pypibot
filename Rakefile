@@ -9,17 +9,17 @@ ENV['GOPATH'] = GOPATH.map { |p|
 	"#{Dir.pwd}/#{p}"
 }.join(':')
 
-godeps = [
+ENV['PATH'] = "#{Dir.pwd}/build/go/bin:#{ENV['PATH']}"
+
+godeps = go_get('build/go/src', [
 	'github.com/golang/protobuf/...',
-	'github.com/jordanorelli/moon'
-].map { |pkg|
-	path = pkg.gsub(/\/\.\.\.$/, '')
-	dest = "build/go/src/#{path}"
-	file dest do
-		sh 'go', 'get', pkg
-	end
-	dest
-}
+	'github.com/syndtr/goleveldb/leveldb',
+	'github.com/scalingdata/gcfg'
+])
+
+protobufs = protoc('pb', 'build/go/src/pypibot/pb')
+
+core = godeps + protobufs
 
 task :default => [
 	'build/bin/server',
@@ -34,11 +34,11 @@ task :edit => godeps do
 	sh 'subl', '.'
 end
 
-file 'build/bin/server' => godeps + FileList['go/src/pypibot/**/*'] do |t|
+file 'build/bin/server' => core + FileList['go/src/pypibot/**/*'] do |t|
 	sh 'go', 'build', '-o', t.name, 'pypibot/server'
 end
 
-file 'build/bin/client' => godeps + FileList['go/src/pypibot/**/*'] do |t|
+file 'build/bin/client' => core + FileList['go/src/pypibot/**/*'] do |t|
 	sh 'go', 'build', '-o', t.name, 'pypibot/client'
 end
 
