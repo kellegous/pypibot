@@ -23,6 +23,11 @@ const (
 
 	godEmail = "kel@kellegous.com"
 	godName  = "God"
+
+	rpcCrtFile = "rpc.crt"
+	rpcKeyFile = "rpc.key"
+	caCrtFile  = "ca.crt"
+	caKeyFile  = "ca.key"
 )
 
 type Config struct {
@@ -42,11 +47,43 @@ func (c *Config) ReadFromFile(filename string) error {
 type Store struct {
 	Config *Config
 
-	db *leveldb.DB
+	db   *leveldb.DB
+	path string
 }
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+func (s *Store) RpcCertFiles() (string, string) {
+	return filepath.Join(s.path, rpcCrtFile), filepath.Join(s.path, rpcKeyFile)
+}
+
+func (s *Store) CaCertFiles() (string, string) {
+	return filepath.Join(s.path, caCrtFile), filepath.Join(s.path, caKeyFile)
+}
+
+func (s *Store) AddUserWithKeyFromFile(user *pb.User, filename string) error {
+	return addUserWithKeyFromFile(s.db, user, filename)
+}
+
+func (s *Store) ForEachUser(f func([]byte, *pb.User) error) error {
+	var ro opt.ReadOptions
+	it := s.db.NewIterator(nil, &ro)
+	defer it.Release()
+
+	var user pb.User
+	for it.Next() {
+		if err := proto.Unmarshal(it.Value(), &user); err != nil {
+			return err
+		}
+
+		if err := f(it.Key(), &user); err != nil {
+			return err
+		}
+	}
+
+	return it.Error()
 }
 
 func addUserWithKey(db *leveldb.DB, user *pb.User, key []byte) error {
@@ -122,6 +159,15 @@ func Create(path string) error {
 		return err
 	}
 
+	if _, err := auth.GenerateCert(
+		"kellego.us",
+		caCrt,
+		caKey,
+		filepath.Join(path, rpcCrtFile),
+		filepath.Join(path, rpcKeyFile)); err != nil {
+		return err
+	}
+
 	db, err := leveldb.OpenFile(filepath.Join(path, userFilePath), &opt.Options{})
 	if err != nil {
 		return err
@@ -155,8 +201,14 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Store{
 		Config: cfg,
 		db:     db,
+		path:   abs,
 	}, nil
 }

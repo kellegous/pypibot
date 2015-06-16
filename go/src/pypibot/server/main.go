@@ -7,6 +7,10 @@ import (
 	"net/http"
 	"os"
 
+	"pypibot/api"
+	"pypibot/auth"
+	"pypibot/pb"
+	"pypibot/rpc"
 	"pypibot/store"
 )
 
@@ -20,22 +24,19 @@ func doServe(args []string) {
 		log.Panic(err)
 	}
 
-	// var cfg config.Config
+	if err := rpc.Serve(s); err != nil {
+		log.Panic(err)
+	}
 
-	// if err := cfg.ReadFromFile(*flagCfg); err != nil {
-	// 	log.Panic(err)
-	// }
+	r := http.NewServeMux()
 
-	// if err := rpc.Serve(&cfg); err != nil {
-	// 	log.Panic(err)
-	// }
+	api.Install(r, s)
 
-	// log.Panic(http.ListenAndServe(cfg.Web.Addr, nil))
-	log.Panic(http.ListenAndServe(s.Config.Web.Addr, nil))
+	log.Panic(http.ListenAndServe(s.Config.Web.Addr, r))
 }
 
-func doInit(args []string) {
-	flags := flag.NewFlagSet("init", flag.PanicOnError)
+func doInitStore(args []string) {
+	flags := flag.NewFlagSet("init-store", flag.PanicOnError)
 	flagDbPath := flags.String("dbpath", "data", "")
 	flags.Parse(args)
 
@@ -44,6 +45,45 @@ func doInit(args []string) {
 	}
 
 	fmt.Printf("Store created: %s\n", *flagDbPath)
+}
+
+func doAddUser(args []string) {
+	flags := flag.NewFlagSet("add-user", flag.PanicOnError)
+	flagDbPath := flags.String("dbpath", "data", "")
+	flags.Parse(args)
+
+	if flags.NArg() != 4 {
+		fmt.Fprintf(os.Stderr, "usage %s %s email name crt key\n", os.Args[0], args[0])
+		os.Exit(1)
+	}
+
+	s, err := store.Open(*flagDbPath)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	caCrt, caKey := s.CaCertFiles()
+
+	if _, err := auth.GenerateCert(
+		"kellego.us",
+		caCrt,
+		caKey,
+		flags.Arg(2),
+		flags.Arg(3)); err != nil {
+		log.Panic(err)
+	}
+
+	e := flags.Arg(0)
+	n := flags.Arg(1)
+	t := pb.User_PERSON
+
+	if err := s.AddUserWithKeyFromFile(&pb.User{
+		Email: &e,
+		Name:  &n,
+		Type:  &t,
+	}, flags.Arg(3)); err != nil {
+		log.Panic(err)
+	}
 }
 
 func usage() {
@@ -60,9 +100,11 @@ func main() {
 
 	switch os.Args[1] {
 	case "serve":
-		doServe(args[1:])
-	case "init":
-		doInit(args[1:])
+		doServe(args[2:])
+	case "init-store":
+		doInitStore(args[2:])
+	case "add-user":
+		doAddUser(args[2:])
 	default:
 		usage()
 	}

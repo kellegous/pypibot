@@ -5,16 +5,18 @@ import (
 	"log"
 	"net"
 
-	"pypibot/config"
+	"pypibot/store"
 )
 
-func newListener(cfg *config.Config) (net.Listener, error) {
-	crt, err := tls.LoadX509KeyPair(cfg.Rpc.Crt, cfg.Rpc.Key)
+func newListener(s *store.Store) (net.Listener, error) {
+	crtFile, keyFile := s.RpcCertFiles()
+
+	crt, err := tls.LoadX509KeyPair(crtFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
 
-	l, err := net.Listen("tcp", cfg.Rpc.Addr)
+	l, err := net.Listen("tcp", s.Config.Rpc.Addr)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +27,7 @@ func newListener(cfg *config.Config) (net.Listener, error) {
 	}), nil
 }
 
-func serve(c *tls.Conn, cfg *config.Config) {
+func serve(c *tls.Conn, s *store.Store) {
 	defer c.Close()
 
 	if err := c.Handshake(); err != nil {
@@ -33,17 +35,12 @@ func serve(c *tls.Conn, cfg *config.Config) {
 		return
 	}
 
-	log.Printf("len(certs) = %d", len(c.ConnectionState().PeerCertificates))
-	for _, crt := range c.ConnectionState().PeerCertificates {
-		log.Println(crt)
-	}
-
 	// TODO(knorton): Authenticate and dispatch by client type.
 	log.Printf("%s connected.", c.RemoteAddr())
 }
 
-func Serve(cfg *config.Config) error {
-	l, err := newListener(cfg)
+func Serve(s *store.Store) error {
+	l, err := newListener(s)
 	if err != nil {
 		return err
 	}
@@ -55,7 +52,7 @@ func Serve(cfg *config.Config) error {
 				log.Fatal(err)
 			}
 
-			go serve(c.(*tls.Conn), cfg)
+			go serve(c.(*tls.Conn), s)
 		}
 	}()
 
