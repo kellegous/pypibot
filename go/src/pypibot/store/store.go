@@ -67,6 +67,22 @@ func (s *Store) AddUserWithKeyFromFile(user *pb.User, filename string) error {
 	return addUserWithKeyFromFile(s.db, user, filename)
 }
 
+func (s *Store) FindUser(key []byte) (*pb.User, error) {
+	var ro opt.ReadOptions
+
+	val, err := s.db.Get(key, &ro)
+	if err != nil {
+		return nil, err
+	}
+
+	var user pb.User
+	if err := proto.Unmarshal(val, &user); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 func (s *Store) ForEachUser(f func([]byte, *pb.User) error) error {
 	var ro opt.ReadOptions
 	it := s.db.NewIterator(nil, &ro)
