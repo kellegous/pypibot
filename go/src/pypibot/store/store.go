@@ -26,13 +26,8 @@ const (
 
 	bitsInRsaKeys = 2048
 
-	godEmail = "kel@kellegous.com"
-	godName  = "God"
-
 	srvCrtFile = "srv.crt.pem"
 	srvKeyFile = "srv.key.pem"
-	godCrtFile = "god.crt.pem"
-	godKeyFile = "god.key.pem"
 )
 
 type Config struct {
@@ -234,19 +229,6 @@ func Create(path string) error {
 		filepath.Join(path, srvCrtFile),
 		srvKey,
 		filepath.Join(path, srvKeyFile)); err != nil {
-		return err
-	}
-
-	godCrt, godKey, err := auth.GenerateClientCert(bitsInRsaKeys, srvCrt, srvKey)
-	if err != nil {
-		return err
-	}
-
-	if err := auth.WriteBothPems(
-		godCrt,
-		filepath.Join(path, godCrtFile),
-		godKey,
-		filepath.Join(path, godKeyFile)); err != nil {
 		return err
 	}
 
