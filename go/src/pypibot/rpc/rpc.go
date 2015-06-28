@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -64,24 +65,25 @@ func serve(c *tls.Conn, s *store.Store) {
 	time.Sleep(10 * time.Second)
 }
 
-func Serve(s *store.Store) error {
+func Serve(s *store.Store) (io.Closer, error) {
 	l, err := newListener(s)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	go func() {
 		for {
 			c, err := l.Accept()
 			if err != nil {
-				log.Fatal(err)
+				// the listener was closed
+				return
 			}
 
 			go serve(c.(*tls.Conn), s)
 		}
 	}()
 
-	return nil
+	return l, nil
 }
 
 type Client struct {

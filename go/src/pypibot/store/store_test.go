@@ -66,7 +66,7 @@ func TestCreateAndOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if uc != 1 {
-		t.Fatalf("expected only 1 user, got %d", uc)
+	if uc != 0 {
+		t.Fatalf("expected no users, got %d", uc)
 	}
 }

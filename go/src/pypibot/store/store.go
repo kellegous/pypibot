@@ -256,17 +256,6 @@ func Create(path string) error {
 	}
 	defer db.Close()
 
-	n := godName
-	e := godEmail
-	t := pb.User_GOD
-
-	if err := addUser(
-		db,
-		&pb.User{Name: &n, Email: &e, Type: &t},
-		godKey); err != nil {
-		return err
-	}
-
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"pypibot/api"
 	"pypibot/auth"
@@ -24,7 +25,7 @@ func doServe(args []string) {
 		log.Panic(err)
 	}
 
-	if err := rpc.Serve(s); err != nil {
+	if _, err := rpc.Serve(s); err != nil {
 		log.Panic(err)
 	}
 
@@ -47,9 +48,19 @@ func doInitStore(args []string) {
 	fmt.Printf("Store created: %s\n", *flagDbPath)
 }
 
+func stringToUserType(s string) (pb.User_UserType, error) {
+	v, ok := pb.User_UserType_value[strings.ToUpper(s)]
+	if !ok {
+		return pb.User_PERSON, fmt.Errorf("invalid user type: %s", s)
+	}
+
+	return pb.User_UserType(v), nil
+}
+
 func doAddUser(args []string) {
 	flags := flag.NewFlagSet("add-user", flag.PanicOnError)
 	flagDbPath := flags.String("dbpath", "data", "")
+	flagUserType := flags.String("type", "PERSON", "")
 	flags.Parse(args)
 
 	if flags.NArg() != 4 {
@@ -62,7 +73,12 @@ func doAddUser(args []string) {
 		log.Panic(err)
 	}
 
-	_, crtPem, keyPem, err := s.CreateUser(flags.Arg(0), flags.Arg(1), pb.User_PERSON)
+	t, err := stringToUserType(*flagUserType)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, crtPem, keyPem, err := s.CreateUser(flags.Arg(0), flags.Arg(1), t)
 	if err != nil {
 		log.Panic(err)
 	}
