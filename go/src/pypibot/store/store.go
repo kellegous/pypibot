@@ -129,10 +129,6 @@ func (s *Store) CreateUser(email, name string, t pb.User_UserType) (*pb.User, *p
 	return user, crtPem, keyPem, nil
 }
 
-func (s *Store) ServerPemFiles() (string, string) {
-	return filepath.Join(s.path, srvCrtFile), filepath.Join(s.path, srvKeyFile)
-}
-
 func (s *Store) AddUser(user *pb.User, key *pem.Block) error {
 	return addUser(s.db, user, key)
 }
