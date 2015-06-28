@@ -10,7 +10,7 @@ import (
 func main() {
 	flagCrt := flag.String("crt", "kellegous.crt.pem", "")
 	flagKey := flag.String("key", "kellegous.key.pem", "")
-	flagCa := flag.String("ca", "data/ca.crt", "")
+	flagCa := flag.String("ca", "data/srv.crt.pem", "")
 	flag.Parse()
 
 	c, err := rpc.Dial("pypi.kellego.us:8081", *flagCa, *flagCrt, *flagKey)

@@ -107,6 +107,7 @@ func Dial(addr, caCrtFile, crtFile, keyFile string) (*Client, error) {
 	con, err := tls.Dial("tcp", addr, &tls.Config{
 		Certificates: []tls.Certificate{c},
 		RootCAs:      p,
+		ServerName:   "kellego.us",
 	})
 	if err != nil {
 		return nil, err
