@@ -65,7 +65,7 @@ func doAddUser(args []string) {
 	caCrt, caKey := s.CaCertFiles()
 
 	if _, err := auth.GenerateCert(
-		"kellego.us",
+		"*.kellego.us",
 		caCrt,
 		caKey,
 		flags.Arg(2),

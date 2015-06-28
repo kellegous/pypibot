@@ -1,7 +1,9 @@
 package store
 
 import (
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -61,6 +63,21 @@ func (s *Store) RpcCertFiles() (string, string) {
 
 func (s *Store) CaCertFiles() (string, string) {
 	return filepath.Join(s.path, caCrtFile), filepath.Join(s.path, caKeyFile)
+}
+
+func (s *Store) CertPool() (*x509.CertPool, error) {
+	b, err := ioutil.ReadFile(filepath.Join(s.path, caCrtFile))
+	if err != nil {
+		return nil, err
+	}
+
+	p := x509.NewCertPool()
+	if !p.AppendCertsFromPEM(b) {
+		return nil, fmt.Errorf("%s is not a valid cert.",
+			filepath.Join(s.path, caCrtFile))
+	}
+
+	return p, nil
 }
 
 func (s *Store) AddUserWithKeyFromFile(user *pb.User, filename string) error {
@@ -160,14 +177,14 @@ func Create(path string) error {
 
 	caCrt := filepath.Join(path, "ca.crt")
 	caKey := filepath.Join(path, "ca.key")
-	if err := auth.GenerateCa("kellego.us", caCrt, caKey); err != nil {
+	if err := auth.GenerateCa("*.kellego.us", caCrt, caKey); err != nil {
 		return err
 	}
 
 	godCrt := filepath.Join(path, "god.crt")
 	godKey := filepath.Join(path, "god.key")
 	if _, err := auth.GenerateCert(
-		"kellego.us",
+		"*.kellego.us",
 		caCrt,
 		caKey,
 		godCrt,
@@ -176,7 +193,7 @@ func Create(path string) error {
 	}
 
 	if _, err := auth.GenerateCert(
-		"kellego.us",
+		"*.kellego.us",
 		caCrt,
 		caKey,
 		filepath.Join(path, rpcCrtFile),
