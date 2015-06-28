@@ -1,102 +1,162 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"os"
-	"os/exec"
-	"path/filepath"
+	"time"
 )
 
-// Use openssl to generate a new RSA key.
-func GenerateRsaKey(filename string, size int) error {
-	if err := exec.Command(
-		"openssl",
-		"genrsa",
-		"-out",
-		filename,
-		fmt.Sprintf("%d", size)).Run(); err != nil {
-		return fmt.Errorf("unable to create rsa key: %s", err)
+const (
+	certInfoCountry = "United States"
+	certInfoOrgName = "kellegous"
+	certInfoOrgUnit = "pypibot"
+	expiresAfter    = 1000 * 24 * time.Hour
+)
+
+func GenerateServerCert(bits int, host string) (*pem.Block, *pem.Block, error) {
+	prv, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return nil
+	sn, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tpl := &x509.Certificate{
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(expiresAfter),
+		SerialNumber:          sn,
+		BasicConstraintsValid: true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		KeyUsage:              x509.KeyUsageDataEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		IsCA:                  true,
+		DNSNames:              []string{host},
+		Subject: pkix.Name{
+			Country:            []string{certInfoCountry},
+			Organization:       []string{certInfoOrgName},
+			OrganizationalUnit: []string{certInfoOrgUnit},
+		},
+	}
+
+	crt, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &prv.PublicKey, prv)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return toPems(crt, prv)
 }
 
-// Use openssl to generate a new private CA certificate and key.
-func GenerateCa(name, crtFile, keyFile string) error {
-	if err := GenerateRsaKey(keyFile, 2048); err != nil {
+func GenerateClientCert(bits int, caCrtPem, caKeyPem *pem.Block) (*pem.Block, *pem.Block, error) {
+	prv, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sn, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	caCrt, err := x509.ParseCertificate(caCrtPem.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	caKey, err := x509.ParsePKCS1PrivateKey(caKeyPem.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tpl := &x509.Certificate{
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(expiresAfter),
+		SerialNumber:          sn,
+		BasicConstraintsValid: true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		Subject: pkix.Name{
+			Country:            []string{certInfoCountry},
+			Organization:       []string{certInfoOrgName},
+			OrganizationalUnit: []string{certInfoOrgUnit},
+		},
+	}
+
+	crt, err := x509.CreateCertificate(rand.Reader, tpl, caCrt, &prv.PublicKey, caKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return toPems(crt, prv)
+}
+
+func toPems(crt []byte, key *rsa.PrivateKey) (*pem.Block, *pem.Block, error) {
+	return &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: crt,
+		}, &pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(key),
+		}, nil
+}
+
+func writePem(b *pem.Block, filename string) error {
+	w, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	return pem.Encode(w, b)
+}
+
+func WriteBothPems(crt *pem.Block, crtFile string, key *pem.Block, keyFile string) error {
+	if err := writePem(crt, crtFile); err != nil {
 		return err
 	}
 
-	if err := exec.Command(
-		"openssl",
-		"req",
-		"-x509",
-		"-new",
-		"-key", keyFile,
-		"-out", crtFile,
-		"-days", "730",
-		"-subj", fmt.Sprintf("/CN=\"%s\"", name)).Run(); err != nil {
-		return fmt.Errorf("unable to create cert: %s", err)
+	if err := writePem(key, keyFile); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func closeAndRemove(f *os.File) {
-	f.Close()
-	os.Remove(f.Name())
+func ReadPem(filename string) (*pem.Block, error) {
+	c, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	b, _ := pem.Decode(c)
+	if b == nil {
+		return nil, fmt.Errorf("unable to decode pem in %s", filename)
+	}
+
+	return b, nil
 }
 
-// Use openssl to generate a new certificate signed by the given CA key.
-func GenerateCert(host, caCrtFile, caKeyFile, crtFile, keyFile string) (string, error) {
-	if err := GenerateRsaKey(keyFile, 2048); err != nil {
-		return "", err
-	}
-
-	tmp, err := ioutil.TempDir(os.TempDir(), "")
+func ReadBothPems(crtFile, keyFile string) (*pem.Block, *pem.Block, error) {
+	crt, err := ReadPem(crtFile)
 	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(tmp)
-
-	reqFile := filepath.Join(tmp, "req")
-	serFile := filepath.Join(tmp, "ser")
-
-	if err := exec.Command(
-		"openssl",
-		"req",
-		"-new",
-		"-out", reqFile,
-		"-key", keyFile,
-		"-subj", fmt.Sprintf("/CN=%s", host)).Run(); err != nil {
-		return "", fmt.Errorf("unable to create signing request: %s", err)
+		return nil, nil, err
 	}
 
-	if err := exec.Command(
-		"openssl",
-		"x509",
-		"-req",
-		"-in", reqFile,
-		"-out", crtFile,
-		"-CAkey", caKeyFile,
-		"-CA", caCrtFile,
-		"-days", "365",
-		"-CAcreateserial",
-		"-CAserial", serFile).Run(); err != nil {
-		return "", fmt.Errorf("unable to create certificate: %s", err)
-	}
-
-	b, err := ioutil.ReadFile(serFile)
+	key, err := ReadPem(keyFile)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
-	return string(b), nil
+	return crt, key, nil
 }
 
 func parsePrivateKey(b []byte) (*rsa.PrivateKey, error) {

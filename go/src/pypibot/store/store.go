@@ -1,9 +1,10 @@
 package store
 
 import (
+	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -23,13 +24,15 @@ const (
 	defaultWebAddr = ":8080"
 	defaultRpcAddr = ":8081"
 
+	bitsInRsaKeys = 2048
+
 	godEmail = "kel@kellegous.com"
 	godName  = "God"
 
-	rpcCrtFile = "rpc.crt"
-	rpcKeyFile = "rpc.key"
-	caCrtFile  = "ca.crt"
-	caKeyFile  = "ca.key"
+	srvCrtFile = "srv.crt.pem"
+	srvKeyFile = "srv.key.pem"
+	godCrtFile = "god.crt.pem"
+	godKeyFile = "god.key.pem"
 )
 
 type Config struct {
@@ -57,31 +60,81 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) RpcCertFiles() (string, string) {
-	return filepath.Join(s.path, rpcCrtFile), filepath.Join(s.path, rpcKeyFile)
-}
+func newCAPool(crtPem *pem.Block) (*x509.CertPool, error) {
+	p := x509.NewCertPool()
 
-func (s *Store) CaCertFiles() (string, string) {
-	return filepath.Join(s.path, caCrtFile), filepath.Join(s.path, caKeyFile)
-}
-
-func (s *Store) CertPool() (*x509.CertPool, error) {
-	b, err := ioutil.ReadFile(filepath.Join(s.path, caCrtFile))
+	crt, err := x509.ParseCertificate(crtPem.Bytes)
 	if err != nil {
 		return nil, err
 	}
 
-	p := x509.NewCertPool()
-	if !p.AppendCertsFromPEM(b) {
-		return nil, fmt.Errorf("%s is not a valid cert.",
-			filepath.Join(s.path, caCrtFile))
-	}
+	p.AddCert(crt)
 
 	return p, nil
 }
 
-func (s *Store) AddUserWithKeyFromFile(user *pb.User, filename string) error {
-	return addUserWithKeyFromFile(s.db, user, filename)
+func (s *Store) ServerTlsConfig() (*tls.Config, error) {
+	crtPem, keyPem, err := auth.ReadBothPems(
+		filepath.Join(s.path, srvCrtFile),
+		filepath.Join(s.path, srvKeyFile))
+	if err != nil {
+		return nil, err
+	}
+
+	prv, err := x509.ParsePKCS1PrivateKey(keyPem.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	crt := tls.Certificate{
+		Certificate: [][]byte{crtPem.Bytes},
+		PrivateKey:  prv,
+	}
+
+	p, err := newCAPool(crtPem)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{crt},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    p,
+	}, nil
+}
+
+func (s *Store) CreateUser(email, name string, t pb.User_UserType) (*pb.User, *pem.Block, *pem.Block, error) {
+	srvCrtPem, srvKeyPem, err := auth.ReadBothPems(
+		filepath.Join(s.path, srvCrtFile),
+		filepath.Join(s.path, srvKeyFile))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Unable to read server cert: %s", err)
+	}
+
+	crtPem, keyPem, err := auth.GenerateClientCert(bitsInRsaKeys, srvCrtPem, srvKeyPem)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to generate client cert: %s", err)
+	}
+
+	user := &pb.User{
+		Email: &email,
+		Name:  &name,
+		Type:  &t,
+	}
+
+	if err := s.AddUser(user, keyPem); err != nil {
+		return nil, nil, nil, fmt.Errorf("unable to insert user: %s", err)
+	}
+
+	return user, crtPem, keyPem, nil
+}
+
+func (s *Store) ServerPemFiles() (string, string) {
+	return filepath.Join(s.path, srvCrtFile), filepath.Join(s.path, srvKeyFile)
+}
+
+func (s *Store) AddUser(user *pb.User, key *pem.Block) error {
+	return addUser(s.db, user, key)
 }
 
 func (s *Store) FindUser(key []byte) (*pb.User, error) {
@@ -119,7 +172,7 @@ func (s *Store) ForEachUser(f func([]byte, *pb.User) error) error {
 	return it.Error()
 }
 
-func addUserWithKey(db *leveldb.DB, user *pb.User, key []byte) error {
+func addUserWithKeyBytes(db *leveldb.DB, user *pb.User, key []byte) error {
 	val, err := proto.Marshal(user)
 	if err != nil {
 		return err
@@ -130,18 +183,18 @@ func addUserWithKey(db *leveldb.DB, user *pb.User, key []byte) error {
 	})
 }
 
-func addUserWithKeyFromFile(db *leveldb.DB, user *pb.User, filename string) error {
-	prv, err := auth.ReadPrivateKey(filename)
+func addUser(db *leveldb.DB, user *pb.User, keyPem *pem.Block) error {
+	prv, err := x509.ParsePKCS1PrivateKey(keyPem.Bytes)
 	if err != nil {
 		return err
 	}
 
-	pub, err := auth.GetPublicKey(prv)
+	pub, err := x509.MarshalPKIXPublicKey(&prv.PublicKey)
 	if err != nil {
 		return err
 	}
 
-	return addUserWithKey(db, user, pub)
+	return addUserWithKeyBytes(db, user, pub)
 }
 
 func writeDefaultConfig(filename string) error {
@@ -175,29 +228,29 @@ func Create(path string) error {
 		return err
 	}
 
-	caCrt := filepath.Join(path, "ca.crt")
-	caKey := filepath.Join(path, "ca.key")
-	if err := auth.GenerateCa("*.kellego.us", caCrt, caKey); err != nil {
+	srvCrt, srvKey, err := auth.GenerateServerCert(bitsInRsaKeys, "kellego.us")
+	if err != nil {
 		return err
 	}
 
-	godCrt := filepath.Join(path, "god.crt")
-	godKey := filepath.Join(path, "god.key")
-	if _, err := auth.GenerateCert(
-		"*.kellego.us",
-		caCrt,
-		caKey,
+	if err := auth.WriteBothPems(
+		srvCrt,
+		filepath.Join(path, srvCrtFile),
+		srvKey,
+		filepath.Join(path, srvKeyFile)); err != nil {
+		return err
+	}
+
+	godCrt, godKey, err := auth.GenerateClientCert(bitsInRsaKeys, srvCrt, srvKey)
+	if err != nil {
+		return err
+	}
+
+	if err := auth.WriteBothPems(
 		godCrt,
-		godKey); err != nil {
-		return err
-	}
-
-	if _, err := auth.GenerateCert(
-		"*.kellego.us",
-		caCrt,
-		caKey,
-		filepath.Join(path, rpcCrtFile),
-		filepath.Join(path, rpcKeyFile)); err != nil {
+		filepath.Join(path, godCrtFile),
+		godKey,
+		filepath.Join(path, godKeyFile)); err != nil {
 		return err
 	}
 
@@ -211,7 +264,7 @@ func Create(path string) error {
 	e := godEmail
 	t := pb.User_GOD
 
-	if err := addUserWithKeyFromFile(
+	if err := addUser(
 		db,
 		&pb.User{Name: &n, Email: &e, Type: &t},
 		godKey); err != nil {

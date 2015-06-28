@@ -15,32 +15,17 @@ import (
 )
 
 func newListener(s *store.Store) (net.Listener, error) {
-	crtFile, keyFile := s.RpcCertFiles()
-
-	crt, err := tls.LoadX509KeyPair(crtFile, keyFile)
+	nl, err := net.Listen("tcp", s.Config.Rpc.Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	p, err := s.CertPool()
+	cfg, err := s.ServerTlsConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	l, err := net.Listen("tcp", s.Config.Rpc.Addr)
-	if err != nil {
-		return nil, err
-	}
-
-	c := &tls.Config{
-		Certificates: []tls.Certificate{crt},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		RootCAs:      p,
-	}
-
-	c.BuildNameToCertificate()
-
-	return tls.NewListener(l, c), nil
+	return tls.NewListener(nl, cfg), nil
 }
 
 func authenticate(c *tls.Conn, s *store.Store) (*pb.User, error) {

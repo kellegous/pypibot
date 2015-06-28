@@ -62,26 +62,16 @@ func doAddUser(args []string) {
 		log.Panic(err)
 	}
 
-	caCrt, caKey := s.CaCertFiles()
-
-	if _, err := auth.GenerateCert(
-		"*.kellego.us",
-		caCrt,
-		caKey,
-		flags.Arg(2),
-		flags.Arg(3)); err != nil {
+	_, crtPem, keyPem, err := s.CreateUser(flags.Arg(0), flags.Arg(1), pb.User_PERSON)
+	if err != nil {
 		log.Panic(err)
 	}
 
-	e := flags.Arg(0)
-	n := flags.Arg(1)
-	t := pb.User_PERSON
-
-	if err := s.AddUserWithKeyFromFile(&pb.User{
-		Email: &e,
-		Name:  &n,
-		Type:  &t,
-	}, flags.Arg(3)); err != nil {
+	if err := auth.WriteBothPems(
+		crtPem,
+		flags.Arg(2),
+		keyPem,
+		flags.Arg(3)); err != nil {
 		log.Panic(err)
 	}
 }
