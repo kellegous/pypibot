@@ -3,10 +3,9 @@ package rpc
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"time"
@@ -90,27 +89,36 @@ type Client struct {
 	c *tls.Conn
 }
 
-func Dial(addr, caCrtFile, crtFile, keyFile string) (*Client, error) {
-	c, err := tls.LoadX509KeyPair(crtFile, keyFile)
+func (c *Client) Close() error {
+	return c.c.Close()
+}
+
+func Dial(addr string, srvCrtPem, crtPem, keyPem *pem.Block) (*Client, error) {
+	prv, err := x509.ParsePKCS1PrivateKey(keyPem.Bytes)
 	if err != nil {
 		return nil, err
 	}
 
-	b, err := ioutil.ReadFile(caCrtFile)
+	crt := tls.Certificate{
+		Certificate: [][]byte{crtPem.Bytes},
+		PrivateKey:  prv,
+	}
+
+	caCrt, err := x509.ParseCertificate(srvCrtPem.Bytes)
 	if err != nil {
 		return nil, err
 	}
 
 	p := x509.NewCertPool()
-	if !p.AppendCertsFromPEM(b) {
-		return nil, fmt.Errorf("invalid ca certificate: %s", caCrtFile)
+	p.AddCert(caCrt)
+
+	cfg := &tls.Config{
+		Certificates: []tls.Certificate{crt},
+		RootCAs:      p,
+		ServerName:   store.ServerName,
 	}
 
-	con, err := tls.Dial("tcp", addr, &tls.Config{
-		Certificates: []tls.Certificate{c},
-		RootCAs:      p,
-		ServerName:   "kellego.us",
-	})
+	con, err := tls.Dial("tcp", addr, cfg)
 	if err != nil {
 		return nil, err
 	}

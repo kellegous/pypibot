@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"pypibot/auth"
+	"pypibot/pb"
 	"pypibot/store"
 )
 
@@ -24,17 +26,39 @@ func TestConnect(t *testing.T) {
 	}
 	defer os.RemoveAll(tmp)
 
-	s, err := createAndOpenStore(filepath.Join(tmp, "data"))
+	data := filepath.Join(tmp, "data")
+
+	s, err := createAndOpenStore(data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 
-	c, err := Serve(s)
+	_, crtPem, keyPem, err := s.CreateUser("foo@email.com", "foo", pb.User_PERSON)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
 
-	// TODO(knorton): Connect the client
+	srv, err := Serve(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srvCrtPem, err := auth.ReadPem(filepath.Join(data, "srv.crt.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clt, err := Dial(":8081", srvCrtPem, crtPem, keyPem)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := clt.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := srv.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

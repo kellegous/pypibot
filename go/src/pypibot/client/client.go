@@ -4,19 +4,30 @@ import (
 	"flag"
 	"log"
 
+	"pypibot/auth"
 	"pypibot/rpc"
 )
 
 func main() {
-	flagCrt := flag.String("crt", "kellegous.crt.pem", "")
-	flagKey := flag.String("key", "kellegous.key.pem", "")
-	flagCa := flag.String("ca", "data/srv.crt.pem", "")
+	flagCrt := flag.String("crt", "crt.pem", "")
+	flagKey := flag.String("key", "key.pem", "")
+	flagSrvCrt := flag.String("srvCrt", "data/srv.crt.pem", "")
 	flag.Parse()
 
-	c, err := rpc.Dial("pypi.kellego.us:8081", *flagCa, *flagCrt, *flagKey)
+	crtPem, keyPem, err := auth.ReadBothPems(*flagCrt, *flagKey)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	log.Println(c)
+	srvCrtPem, err := auth.ReadPem(*flagSrvCrt)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	clt, err := rpc.Dial("pypi.kellego.us:8081", srvCrtPem, crtPem, keyPem)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	log.Println(clt)
 }

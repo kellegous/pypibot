@@ -28,6 +28,8 @@ const (
 
 	srvCrtFile = "srv.crt.pem"
 	srvKeyFile = "srv.key.pem"
+
+	ServerName = "kellego.us"
 )
 
 type Config struct {
@@ -219,7 +221,7 @@ func Create(path string) error {
 		return err
 	}
 
-	srvCrt, srvKey, err := auth.GenerateServerCert(bitsInRsaKeys, "kellego.us")
+	srvCrt, srvKey, err := auth.GenerateServerCert(bitsInRsaKeys, ServerName)
 	if err != nil {
 		return err
 	}
