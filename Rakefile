@@ -1,5 +1,7 @@
 require './util/rake'
 
+EDITOR='atom'
+
 GOPATH=[
 	'build/go',
 	'go'
@@ -31,7 +33,7 @@ task :test do
 end
 
 task :edit => godeps do
-	sh 'subl', '.'
+	sh EDITOR, '.'
 end
 
 file 'build/bin/server' => core + FileList['go/src/pypibot/**/*'] do |t|

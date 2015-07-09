@@ -3,12 +3,13 @@ package rpc
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
+	"encoding/binary"
 	"errors"
 	"io"
 	"log"
 	"net"
-	"time"
+
+	"github.com/golang/protobuf/proto"
 
 	"pypibot/pb"
 	"pypibot/store"
@@ -43,7 +44,47 @@ func authenticate(c *tls.Conn, s *store.Store) (*pb.User, error) {
 		return u, nil
 	}
 
-	return nil, errors.New("certificate not authorized.")
+	return nil, errors.New("certificate not authorized")
+}
+
+func readMsg(c net.Conn) (uint32, []byte, error) {
+	var t uint32
+	if err := binary.Read(c, binary.BigEndian, &t); err != nil {
+		return 0, nil, err
+	}
+
+	var s uint32
+	if err := binary.Read(c, binary.BigEndian, &s); err != nil {
+		return 0, nil, err
+	}
+
+	b := make([]byte, int(s))
+	if _, err := io.ReadFull(c, b); err != nil {
+		return 0, nil, err
+	}
+
+	return t, b, nil
+}
+
+func writeMsg(c net.Conn, t uint32, m proto.Message) error {
+	b, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+
+	if err := binary.Write(c, binary.BigEndian, t); err != nil {
+		return err
+	}
+
+	if err := binary.Write(c, binary.BigEndian, uint32(len(b))); err != nil {
+		return err
+	}
+
+	if _, err := c.Write(b); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func serve(c *tls.Conn, s *store.Store) {
@@ -54,16 +95,29 @@ func serve(c *tls.Conn, s *store.Store) {
 		return
 	}
 
-	user, err := authenticate(c, s)
+	_, err := authenticate(c, s)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	log.Printf("user: %v\n", user)
-	time.Sleep(10 * time.Second)
+	for {
+		t, m, err := readMsg(c)
+		if err == io.EOF {
+			return
+		} else if err != nil {
+			log.Panic(err)
+			return
+		}
+
+		if err := dispatch(c, t, m); err != nil {
+			log.Print(err)
+			return
+		}
+	}
 }
 
+// Serve ...
 func Serve(s *store.Store) (io.Closer, error) {
 	l, err := newListener(s)
 	if err != nil {
@@ -83,47 +137,4 @@ func Serve(s *store.Store) (io.Closer, error) {
 	}()
 
 	return l, nil
-}
-
-type Client struct {
-	c *tls.Conn
-}
-
-func (c *Client) Close() error {
-	return c.c.Close()
-}
-
-func Dial(addr string, srvCrtPem, crtPem, keyPem *pem.Block) (*Client, error) {
-	prv, err := x509.ParsePKCS1PrivateKey(keyPem.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	crt := tls.Certificate{
-		Certificate: [][]byte{crtPem.Bytes},
-		PrivateKey:  prv,
-	}
-
-	caCrt, err := x509.ParseCertificate(srvCrtPem.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	p := x509.NewCertPool()
-	p.AddCert(caCrt)
-
-	cfg := &tls.Config{
-		Certificates: []tls.Certificate{crt},
-		RootCAs:      p,
-		ServerName:   store.ServerName,
-	}
-
-	con, err := tls.Dial("tcp", addr, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Client{
-		c: con,
-	}, nil
 }

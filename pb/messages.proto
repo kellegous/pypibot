@@ -1,0 +1,9 @@
+package pb;
+
+message PingReq {
+  required int32 id = 1;
+}
+
+message PingRes {
+  required int32 id = 1;
+}

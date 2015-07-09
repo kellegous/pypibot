@@ -29,5 +29,10 @@ func main() {
 		log.Panic(err)
 	}
 
-	log.Println(clt)
+	res, err := clt.Ping()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	log.Println(res)
 }
