@@ -5,8 +5,6 @@ import (
 	"net"
 
 	"github.com/golang/protobuf/proto"
-
-	"pypibot/pb"
 )
 
 const (
@@ -14,11 +12,11 @@ const (
 )
 
 func cmdPing(c net.Conn, b []byte) error {
-	var m pb.PingReq
+	var m PingReq
 	if err := proto.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	return writeMsg(c, msgPingMsg, &pb.PingRes{
+	return writeMsg(c, msgPingMsg, &PingRes{
 		Id: m.Id,
 	})
 }

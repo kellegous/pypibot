@@ -4,11 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 
-	"github.com/golang/protobuf/proto"
-
-	"pypibot/pb"
 	"pypibot/store"
 )
 
@@ -23,26 +19,17 @@ func (c *Client) Close() error {
 }
 
 // Ping ...
-func (c *Client) Ping() (*pb.PingRes, error) {
+func (c *Client) Ping() (*PingRes, error) {
 	var id int32 = 1
 
-	if err := writeMsg(c.c, msgPingMsg, &pb.PingReq{
-		Id: &id,
+	if err := writeMsg(c.c, msgPingMsg, &PingReq{
+		Id: id,
 	}); err != nil {
 		return nil, err
 	}
 
-	t, b, err := readMsg(c.c)
-	if err != nil {
-		return nil, err
-	}
-
-	if t != msgPingMsg {
-		return nil, fmt.Errorf("invalid response type: %d", t)
-	}
-
-	var res pb.PingRes
-	if err := proto.Unmarshal(b, &res); err != nil {
+	var res PingRes
+	if err := readAndUnmarshalMsg(c.c, msgPingMsg, &res); err != nil {
 		return nil, err
 	}
 

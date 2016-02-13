@@ -4,11 +4,11 @@ EDITOR='atom'
 
 GOPATH=[
 	'build/go',
-	'go'
+	'.'
 ]
 
 ENV['GOPATH'] = GOPATH.map { |p|
-	"#{Dir.pwd}/#{p}"
+	File.absolute_path(File.join(Dir.pwd, p))
 }.join(':')
 
 ENV['PATH'] = "#{Dir.pwd}/build/go/bin:#{ENV['PATH']}"
@@ -19,7 +19,7 @@ godeps = go_get('build/go/src', [
 	'github.com/scalingdata/gcfg'
 ])
 
-protobufs = protoc('pb', 'build/go/src/pypibot/pb')
+protobufs = protoc('src')
 
 core = godeps + protobufs
 
@@ -46,4 +46,8 @@ end
 
 task :nuke do
 	rm_rf 'build'
+end
+
+task :zing do
+	protoc2('src', 'build')
 end

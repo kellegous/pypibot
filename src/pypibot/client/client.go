@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"time"
 
 	"pypibot/auth"
 	"pypibot/rpc"
@@ -29,10 +30,13 @@ func main() {
 		log.Panic(err)
 	}
 
-	res, err := clt.Ping()
-	if err != nil {
-		log.Panic(err)
-	}
+	for {
+		res, err := clt.Ping()
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Println(res)
 
-	log.Println(res)
+		time.Sleep(2 * time.Second)
+	}
 }

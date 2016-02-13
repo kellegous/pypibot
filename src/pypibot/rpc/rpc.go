@@ -5,13 +5,13 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
 
 	"github.com/golang/protobuf/proto"
 
-	"pypibot/pb"
 	"pypibot/store"
 )
 
@@ -29,7 +29,7 @@ func newListener(s *store.Store) (net.Listener, error) {
 	return tls.NewListener(nl, cfg), nil
 }
 
-func authenticate(c *tls.Conn, s *store.Store) (*pb.User, error) {
+func authenticate(c *tls.Conn, s *store.Store) (*store.User, error) {
 	for _, cert := range c.ConnectionState().PeerCertificates {
 		key, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
 		if err != nil {
@@ -47,23 +47,36 @@ func authenticate(c *tls.Conn, s *store.Store) (*pb.User, error) {
 	return nil, errors.New("certificate not authorized")
 }
 
-func readMsg(c net.Conn) (uint32, []byte, error) {
+func readMsg(r io.Reader) (uint32, []byte, error) {
 	var t uint32
-	if err := binary.Read(c, binary.BigEndian, &t); err != nil {
+	if err := binary.Read(r, binary.BigEndian, &t); err != nil {
 		return 0, nil, err
 	}
 
 	var s uint32
-	if err := binary.Read(c, binary.BigEndian, &s); err != nil {
+	if err := binary.Read(r, binary.BigEndian, &s); err != nil {
 		return 0, nil, err
 	}
 
 	b := make([]byte, int(s))
-	if _, err := io.ReadFull(c, b); err != nil {
+	if _, err := io.ReadFull(r, b); err != nil {
 		return 0, nil, err
 	}
 
 	return t, b, nil
+}
+
+func readAndUnmarshalMsg(r io.Reader, t uint32, m proto.Message) error {
+	tr, br, err := readMsg(r)
+	if err != nil {
+		return err
+	}
+
+	if tr != t {
+		return fmt.Errorf("wrong type: expected %d, got %d", t, tr)
+	}
+
+	return proto.Unmarshal(br, m)
 }
 
 func writeMsg(c net.Conn, t uint32, m proto.Message) error {

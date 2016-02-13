@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package store;
+
+message User {
+	string email = 1;
+	string name = 2;
+
+	enum UserType {
+		PERSON = 0;
+		BOT = 1;
+		GOD = 2;
+	}
+
+	UserType type = 3;
+}

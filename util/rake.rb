@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'pathname'
 
 # Allows auto generation of a clean task from file declarations
 CLEAN = Rake::FileList["**/*~", "**/*.bak", "**/core"]
@@ -23,19 +24,15 @@ end
 
 # generates build rules for protobufs. Rules that target dst are generated
 # by scanning src.
-def protoc(src, dst)
-	file dst do
-		FileUtils.mkdir_p dst
-	end
+def protoc(src)
+  FileList["#{src}/**/*.proto"].map do |src_path|
+    dst_path = src.sub(/\.proto/, '.pb.go')
+    file dst_path => [src_path] do
+      sh 'protoc', "-I#{src}", "--go_out=#{src}", src_path
+    end
 
-	FileList["#{src}/*.proto"].map do |proto|
-		dest = File.join(dst, File.basename(proto, '.proto') + '.pb.go')
-		file dest => [proto, dst] do
-			sh 'protoc', "-I#{src}", "--go_out=#{dst}", proto
-		end
-
-		dest
-	end
+    dst_path
+  end
 end
 
 def go_get(dst, deps)

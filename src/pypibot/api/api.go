@@ -6,12 +6,11 @@ import (
 	"log"
 	"net/http"
 
-	"pypibot/pb"
 	"pypibot/store"
 )
 
 type userResp struct {
-	*pb.User
+	*store.User
 	Key string `json:"pub-key"`
 }
 
@@ -27,7 +26,7 @@ func Install(r *http.ServeMux, s *store.Store) {
 	r.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
 		var users []*userResp
 
-		if err := s.ForEachUser(func(key []byte, user *pb.User) error {
+		if err := s.ForEachUser(func(key []byte, user *store.User) error {
 			u := *user
 			users = append(users, &userResp{
 				User: &u,

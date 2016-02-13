@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package rpc;
+
+message PingReq {
+  int32 id = 1;
+}
+
+message PingRes {
+  int32 id = 1;
+}

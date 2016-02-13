@@ -14,7 +14,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/opt"
 
 	"pypibot/auth"
-	"pypibot/pb"
 )
 
 const (
@@ -100,7 +99,8 @@ func (s *Store) ServerTlsConfig() (*tls.Config, error) {
 	}, nil
 }
 
-func (s *Store) CreateUser(email, name string, t pb.User_UserType) (*pb.User, *pem.Block, *pem.Block, error) {
+// CreateUser ...
+func (s *Store) CreateUser(email, name string, t User_UserType) (*User, *pem.Block, *pem.Block, error) {
 	srvCrtPem, srvKeyPem, err := auth.ReadBothPems(
 		filepath.Join(s.path, srvCrtFile),
 		filepath.Join(s.path, srvKeyFile))
@@ -113,10 +113,10 @@ func (s *Store) CreateUser(email, name string, t pb.User_UserType) (*pb.User, *p
 		return nil, nil, nil, fmt.Errorf("unable to generate client cert: %s", err)
 	}
 
-	user := &pb.User{
-		Email: &email,
-		Name:  &name,
-		Type:  &t,
+	user := &User{
+		Email: email,
+		Name:  name,
+		Type:  t,
 	}
 
 	if err := s.AddUser(user, keyPem); err != nil {
@@ -126,11 +126,11 @@ func (s *Store) CreateUser(email, name string, t pb.User_UserType) (*pb.User, *p
 	return user, crtPem, keyPem, nil
 }
 
-func (s *Store) AddUser(user *pb.User, key *pem.Block) error {
+func (s *Store) AddUser(user *User, key *pem.Block) error {
 	return addUser(s.db, user, key)
 }
 
-func (s *Store) FindUser(key []byte) (*pb.User, error) {
+func (s *Store) FindUser(key []byte) (*User, error) {
 	var ro opt.ReadOptions
 
 	val, err := s.db.Get(key, &ro)
@@ -138,7 +138,7 @@ func (s *Store) FindUser(key []byte) (*pb.User, error) {
 		return nil, err
 	}
 
-	var user pb.User
+	var user User
 	if err := proto.Unmarshal(val, &user); err != nil {
 		return nil, err
 	}
@@ -146,12 +146,12 @@ func (s *Store) FindUser(key []byte) (*pb.User, error) {
 	return &user, nil
 }
 
-func (s *Store) ForEachUser(f func([]byte, *pb.User) error) error {
+func (s *Store) ForEachUser(f func([]byte, *User) error) error {
 	var ro opt.ReadOptions
 	it := s.db.NewIterator(nil, &ro)
 	defer it.Release()
 
-	var user pb.User
+	var user User
 	for it.Next() {
 		if err := proto.Unmarshal(it.Value(), &user); err != nil {
 			return err
@@ -165,7 +165,7 @@ func (s *Store) ForEachUser(f func([]byte, *pb.User) error) error {
 	return it.Error()
 }
 
-func addUserWithKeyBytes(db *leveldb.DB, user *pb.User, key []byte) error {
+func addUserWithKeyBytes(db *leveldb.DB, user *User, key []byte) error {
 	val, err := proto.Marshal(user)
 	if err != nil {
 		return err
@@ -176,7 +176,7 @@ func addUserWithKeyBytes(db *leveldb.DB, user *pb.User, key []byte) error {
 	})
 }
 
-func addUser(db *leveldb.DB, user *pb.User, keyPem *pem.Block) error {
+func addUser(db *leveldb.DB, user *User, keyPem *pem.Block) error {
 	prv, err := x509.ParsePKCS1PrivateKey(keyPem.Bytes)
 	if err != nil {
 		return err

@@ -10,7 +10,6 @@ import (
 
 	"pypibot/api"
 	"pypibot/auth"
-	"pypibot/pb"
 	"pypibot/rpc"
 	"pypibot/store"
 )
@@ -48,13 +47,13 @@ func doInitStore(args []string) {
 	fmt.Printf("Store created: %s\n", *flagDbPath)
 }
 
-func stringToUserType(s string) (pb.User_UserType, error) {
-	v, ok := pb.User_UserType_value[strings.ToUpper(s)]
+func stringToUserType(s string) (store.User_UserType, error) {
+	v, ok := store.User_UserType_value[strings.ToUpper(s)]
 	if !ok {
-		return pb.User_PERSON, fmt.Errorf("invalid user type: %s", s)
+		return store.User_PERSON, fmt.Errorf("invalid user type: %s", s)
 	}
 
-	return pb.User_UserType(v), nil
+	return store.User_UserType(v), nil
 }
 
 func doAddUser(args []string) {
