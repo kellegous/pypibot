@@ -26,7 +26,7 @@ end
 # by scanning src.
 def protoc(src)
   FileList["#{src}/**/*.proto"].map do |src_path|
-    dst_path = src.sub(/\.proto/, '.pb.go')
+    dst_path = src_path.sub(/\.proto/, '.pb.go')
     file dst_path => [src_path] do
       sh 'protoc', "-I#{src}", "--go_out=#{src}", src_path
     end
